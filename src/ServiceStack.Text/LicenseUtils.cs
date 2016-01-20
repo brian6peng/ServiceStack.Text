@@ -236,87 +236,7 @@ namespace ServiceStack
 
         public static void AssertValidUsage(LicenseFeature feature, QuotaType quotaType, int count)
         {
-            var licensedFeatures = ActivatedLicenseFeatures();
-            if ((LicenseFeature.All & licensedFeatures) == LicenseFeature.All) //Standard Usage
-                return;
-
-            if (AccessTokenScope != null)
-            {
-                if ((feature & AccessTokenScope.tempFeatures) == feature)
-                    return;
-            }
-
-            //Free Quotas
-            switch (feature)
-            {
-                case LicenseFeature.Text:
-                    switch (quotaType)
-                    {
-                        case QuotaType.Types:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.TextTypes, count, ErrorMessages.ExceededTextTypes);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.Redis:
-                    switch (quotaType)
-                    {
-                        case QuotaType.Types:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.RedisTypes, count, ErrorMessages.ExceededRedisTypes);
-                            return;
-                        case QuotaType.RequestsPerHour:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.RedisRequestPerHour, count, ErrorMessages.ExceededRedisRequests);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.OrmLite:
-                    switch (quotaType)
-                    {
-                        case QuotaType.Tables:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.OrmLiteTables, count, ErrorMessages.ExceededOrmLiteTables);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.Aws:
-                    switch (quotaType)
-                    {
-                        case QuotaType.Tables:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.AwsTables, count, ErrorMessages.ExceededAwsTables);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.ServiceStack:
-                    switch (quotaType)
-                    {
-                        case QuotaType.Operations:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.ServiceStackOperations, count, ErrorMessages.ExceededServiceStackOperations);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.Admin:
-                    switch (quotaType)
-                    {
-                        case QuotaType.PremiumFeature:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.PremiumFeature, count, ErrorMessages.ExceededAdminUi);
-                            return;
-                    }
-                    break;
-
-                case LicenseFeature.Premium:
-                    switch (quotaType)
-                    {
-                        case QuotaType.PremiumFeature:
-                            ApprovedUsage(licensedFeatures, feature, FreeQuotas.PremiumFeature, count, ErrorMessages.ExceededPremiumFeature);
-                            return;
-                    }
-                    break;
-            }
-
-            throw new LicenseException("Unknown Quota Usage: {0}, {1}".Fmt(feature, quotaType)).Trace();
+            return;
         }
 
         public static LicenseFeature GetLicensedFeatures(this LicenseKey key)
@@ -325,7 +245,7 @@ namespace ServiceStack
             {
                 case LicenseType.Free:
                     return LicenseFeature.Free;
-                
+
                 case LicenseType.Indie:
                 case LicenseType.Business:
                 case LicenseType.Enterprise:
