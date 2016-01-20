@@ -5,7 +5,7 @@
 
   <PropertyGroup>
     <MajorVersion Condition="$(MajorVersion) == ''">4</MajorVersion>
-    <MinorVersion Condition="$(MinorVersion) == ''">0</MinorVersion>
+    <MinorVersion Condition="$(MinorVersion) == ''">1</MinorVersion>
     <PatchVersion Condition="$(PatchVersion) == ''">$(BUILD_NUMBER)</PatchVersion>
   </PropertyGroup>
 
@@ -43,6 +43,7 @@
 
   <Target Name="BeforeBuildSolutions">
     <Message Text="*****Before building solution*****" Importance="high"/>
+    <CallTarget Targets="UpdateVersion" />
     <!--<Copy SourceFiles="Test/ci.app.config" DestinationFiles="Test/app.config" />-->
   </Target>
 

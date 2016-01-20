@@ -50,12 +50,12 @@ namespace ServiceStack.Text
 
             VersionString = ServiceStackVersion.ToString(CultureInfo.InvariantCulture);
 
-            __releaseDate = new DateTime(2001,01,01);
+            __releaseDate = new DateTime(2016,01,20);
         }
 
         public static string VersionString { get; set; }
 
-        public static decimal ServiceStackVersion = 4.00m;
+        public static decimal ServiceStackVersion = 4.152m;
 
         public static bool IsUnix { get; set; }
 
