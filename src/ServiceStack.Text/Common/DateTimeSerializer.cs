@@ -24,7 +24,6 @@ namespace ServiceStack.Text.Common
         public const string CondensedDateTimeFormat = "yyyyMMdd";                             //8
         public const string ShortDateTimeFormat = "yyyy-MM-dd";                               //11
         public const string DefaultDateTimeFormat = "dd/MM/yyyy HH:mm:ss";                    //20
-        public const string DefaultDateTimeFormatWithFraction = "dd/MM/yyyy HH:mm:ss.fff";    //24
         public const string XsdDateTimeFormat = "yyyy-MM-ddTHH:mm:ss.fffffffZ";               //29
         public const string XsdDateTimeFormat3F = "yyyy-MM-ddTHH:mm:ss.fffZ";                 //25
         public const string XsdDateTimeFormatSeconds = "yyyy-MM-ddTHH:mm:ssZ";                //21
@@ -50,7 +49,7 @@ namespace ServiceStack.Text.Common
         /// </summary>
         /// <param name="dateTime"></param>
         /// <returns></returns>
-        public static DateTime Prepare(this DateTime dateTime, bool parsedAsUtc=false)
+        public static DateTime Prepare(this DateTime dateTime, bool parsedAsUtc = false)
         {
             if (JsConfig.AlwaysUseUtc)
             {
@@ -88,15 +87,6 @@ namespace ServiceStack.Text.Common
 
                     if (JsConfig.AssumeUtc)
                         unspecifiedDate = DateTime.SpecifyKind(unspecifiedDate, DateTimeKind.Utc);
-
-                    return unspecifiedDate.Prepare();
-                }
-
-                if (dateTimeStr.Length == DefaultDateTimeFormatWithFraction.Length)
-                {
-                    var unspecifiedDate = JsConfig.AssumeUtc    
-                        ? DateTime.Parse(dateTimeStr, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)
-                        : DateTime.Parse(dateTimeStr, CultureInfo.InvariantCulture);
 
                     return unspecifiedDate.Prepare();
                 }
@@ -144,12 +134,13 @@ namespace ServiceStack.Text.Common
                         if (manualDate != null)
                             return manualDate.Value;
                     }
-                    catch {}
+                    catch { }
                 }
 
                 try
                 {
-                    var dateTime = DateTime.Parse(dateTimeStr, null, DateTimeStyles.AssumeLocal);
+                    var assumeKind = JsConfig.AssumeUtc ? DateTimeStyles.AssumeUniversal : DateTimeStyles.AssumeLocal;
+                    var dateTime = DateTime.Parse(dateTimeStr, CultureInfo.InvariantCulture, assumeKind);
                     return dateTime.Prepare();
                 }
                 catch (FormatException)
@@ -178,7 +169,7 @@ namespace ServiceStack.Text.Common
         /// <returns>The repaired string. If no repairs were made, the original string is returned.</returns>
         private static string RepairXsdTimeSeparator(string dateTimeStr)
         {
-            if( (dateTimeStr.Length > XsdTimeSeparatorIndex) && (dateTimeStr[XsdTimeSeparatorIndex] == ' ') && dateTimeStr.EndsWith(XsdUtcSuffix) )
+            if ((dateTimeStr.Length > XsdTimeSeparatorIndex) && (dateTimeStr[XsdTimeSeparatorIndex] == ' ') && dateTimeStr.EndsWith(XsdUtcSuffix))
             {
                 dateTimeStr = dateTimeStr.Substring(0, XsdTimeSeparatorIndex) + XsdTimeSeparator +
                               dateTimeStr.Substring(XsdTimeSeparatorIndex + 1);
@@ -189,7 +180,7 @@ namespace ServiceStack.Text.Common
 
         public static DateTime? ParseManual(string dateTimeStr)
         {
-            var dateKind = JsConfig.AssumeUtc || JsConfig.AlwaysUseUtc 
+            var dateKind = JsConfig.AssumeUtc || JsConfig.AlwaysUseUtc
                 ? DateTimeKind.Utc
                 : DateTimeKind.Local;
 
@@ -263,7 +254,7 @@ namespace ServiceStack.Text.Common
                         if (msStr.Length > 3)
                         {
                             var subMsStr = msStr.Substring(3);
-                            subMs = double.Parse(subMsStr)/Math.Pow(10, subMsStr.Length);
+                            subMs = double.Parse(subMsStr) / Math.Pow(10, subMsStr.Length);
                         }
                     }
                 }
@@ -289,8 +280,8 @@ namespace ServiceStack.Text.Common
                         min = int.Parse(timeOffset.Substring(2));
                     }
 
-                    dateTime = dateTime.AddHours(offsetMultiplier*hh);
-                    dateTime = dateTime.AddMinutes(offsetMultiplier*min);
+                    dateTime = dateTime.AddHours(offsetMultiplier * hh);
+                    dateTime = dateTime.AddMinutes(offsetMultiplier * min);
                 }
 
                 return dateTime;
@@ -329,7 +320,7 @@ namespace ServiceStack.Text.Common
                 if (Env.IsMono)
                 {
                     // Without that Mono uses a Local timezone))
-                    dateTimeOffsetStr = dateTimeOffsetStr.Substring(0, dateTimeOffsetStr.Length - 1) + "+00:00";                     
+                    dateTimeOffsetStr = dateTimeOffsetStr.Substring(0, dateTimeOffsetStr.Length - 1) + "+00:00";
                 }
             }
 
@@ -373,7 +364,7 @@ namespace ServiceStack.Text.Common
         {
             return dateTimeStr.StartsWith("P", StringComparison.Ordinal) || dateTimeStr.StartsWith("-P", StringComparison.Ordinal)
                 ? ParseXsdTimeSpan(dateTimeStr)
-                : dateTimeStr.Contains(":") 
+                : dateTimeStr.Contains(":")
                 ? TimeSpan.Parse(dateTimeStr)
                 : ParseNSTimeInterval(dateTimeStr);
         }
@@ -411,8 +402,8 @@ namespace ServiceStack.Text.Common
             if (isStartOfDay)
                 return dateTime.ToString(ShortDateTimeFormat);
 
-            var hasFractionalSecs = (timeOfDay.Milliseconds != 0) 
-                || ((timeOfDay.Ticks%TimeSpan.TicksPerMillisecond) != 0);
+            var hasFractionalSecs = (timeOfDay.Milliseconds != 0)
+                || ((timeOfDay.Ticks % TimeSpan.TicksPerMillisecond) != 0);
             if (!hasFractionalSecs)
                 return dateTime.Kind != DateTimeKind.Utc
                     ? dateTime.ToString(DateTimeFormatSecondsUtcOffset)

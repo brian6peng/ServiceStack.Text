@@ -11,6 +11,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using ServiceStack.Text;
 using ServiceStack.Text.Common;
 
@@ -22,7 +23,8 @@ namespace ServiceStack
         {
             public const string WindowsStore = "WindowsStore";
             public const string Android = "Android";
-            public const string IOS = "IOS";
+			public const string IOS = "IOS";
+            public const string Mac = "MAC";
             public const string Silverlight5 = "Silverlight5";
             public const string WindowsPhone = "WindowsPhone";
         }
@@ -40,8 +42,12 @@ namespace ServiceStack
           = new XboxPclExport()
 #elif __IOS__
           = new IosPclExport()
+#elif __MAC__
+          = new MacPclExport()
 #elif ANDROID
           = new AndroidPclExport()
+#elif NET45
+          = new Net45PclExport()
 #else
           = new Net40PclExport()
 #endif
@@ -57,6 +63,8 @@ namespace ServiceStack
                 if (ConfigureProvider("ServiceStack.IosPclExportClient, ServiceStack.Pcl.iOS"))
                     return;
                 if (ConfigureProvider("ServiceStack.AndroidPclExportClient, ServiceStack.Pcl.Android"))
+                    return;
+                if (ConfigureProvider("ServiceStack.MacPclExportClient, ServiceStack.Pcl.Mac20"))
                     return;
                 if (ConfigureProvider("ServiceStack.WinStorePclExportClient, ServiceStack.Pcl.WinStore"))
                     return;
@@ -84,7 +92,16 @@ namespace ServiceStack
         public static void Configure(PclExport instance)
         {
             Instance = instance ?? Instance;
+
+            if (Instance != null && Instance.EmptyTask == null)
+            {
+                var tcs = new TaskCompletionSource<object>();
+                tcs.SetResult(null);
+                Instance.EmptyTask = tcs.Task;
+            }
         }
+
+        public Task EmptyTask;
 
         public bool SupportsExpression;
 
@@ -466,6 +483,13 @@ namespace ServiceStack
         public virtual string GetStackTrace()
         {
             return null;
+        }
+
+        public virtual Task WriteAndFlushAsync(Stream stream, byte[] bytes)
+        {
+            stream.Write(bytes, 0, bytes.Length);
+            stream.Flush();
+            return EmptyTask;
         }
     }
 

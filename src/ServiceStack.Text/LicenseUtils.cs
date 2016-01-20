@@ -3,8 +3,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
 using ServiceStack.Text;
 
 namespace ServiceStack
@@ -160,6 +162,10 @@ namespace ServiceStack
         public static void RegisterLicense(string licenseKeyText)
         {
             string cutomerId = null;
+#if !PCL
+            var hold = Thread.CurrentThread.CurrentCulture;
+            Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+#endif
             try
             {
                 var parts = licenseKeyText.SplitOnFirst('-');
@@ -192,6 +198,12 @@ namespace ServiceStack
                     msg += " The id for this license is '{0}'".Fmt(cutomerId);
 
                 throw new LicenseException(msg).Trace();
+            }
+            finally
+            {
+#if !PCL
+                Thread.CurrentThread.CurrentCulture = hold;
+#endif
             }
         }
 
@@ -355,6 +367,7 @@ namespace ServiceStack
             {
                 JsConfig<DateTime>.DeSerializeFn = null;
                 JsConfig<DateTime>.RawDeserializeFn = null;
+
                 var key = jsv.FromJsv<LicenseKey>();
 
                 if (key.Ref != refId)
@@ -412,7 +425,7 @@ namespace ServiceStack
                 "ServiceStack.RabbitMq.RabbitMqProducer+AccessToken",
                 "ServiceStack.Messaging.RedisMessageQueueClient+AccessToken",
                 "ServiceStack.Messaging.RedisMessageProducer+AccessToken",
-                "ServiceStack.Aws.AwsClientUtils+AccessToken",
+                "ServiceStack.Aws.Support.AwsClientUtils+AccessToken",
             };
 
             internal static readonly HashSet<string> __dlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

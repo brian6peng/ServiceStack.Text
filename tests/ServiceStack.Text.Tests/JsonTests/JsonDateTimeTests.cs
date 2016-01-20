@@ -523,12 +523,10 @@ namespace ServiceStack.Text.Tests.JsonTests
             var dateTime = new DateTime(1994, 11, 24, 12, 34, 56, DateTimeKind.Local);
             var ssJson = JsonSerializer.SerializeToString(dateTime);
 
-            var offsetSpan = TimeZoneInfo.Local.GetUtcOffset(dateTime);
-            var offset = offsetSpan.ToTimeOffsetString(":");
+            var dateTimeUtc = dateTime.ToUniversalTime();
+            var ssJsonUtc = JsonSerializer.SerializeToString(dateTimeUtc);
 
-            Assert.That(ssJson, Is.EqualTo(@"""Thu, 24 Nov 1994 04:34:56 GMT"""). //Convert to UTC on wire
-                                Or.EqualTo(@"""Thu, 24 Nov 1994 17:34:56 GMT""").
-                                Or.EqualTo(@"""Thu, 24 Nov 1994 20:34:56 GMT"""));
+            Assert.That(ssJson, Is.EqualTo(ssJsonUtc)); //Convert to UTC on wire
             JsConfig.Reset();
         }
 
@@ -540,9 +538,10 @@ namespace ServiceStack.Text.Tests.JsonTests
             var dateTime = new DateTime(1994, 11, 24, 12, 34, 56, DateTimeKind.Unspecified);
             var ssJson = JsonSerializer.SerializeToString(dateTime);
 
-            Assert.That(ssJson, Is.EqualTo(@"""Thu, 24 Nov 1994 04:34:56 GMT"""). //Convert to UTC on wire
-                                Or.EqualTo(@"""Thu, 24 Nov 1994 17:34:56 GMT""").
-                                Or.EqualTo(@"""Thu, 24 Nov 1994 20:34:56 GMT"""));
+            var dateTimeUtc = dateTime.ToUniversalTime();
+            var ssJsonUtc = JsonSerializer.SerializeToString(dateTimeUtc);
+
+            Assert.That(ssJson, Is.EqualTo(ssJsonUtc)); //Convert to UTC on wire
             JsConfig.Reset();
         }
 
@@ -707,6 +706,25 @@ namespace ServiceStack.Text.Tests.JsonTests
             var date = "2000-01-01".FromJson<DateTime>();
             Assert.That(date.Kind, Is.EqualTo(DateTimeKind.Utc));
             Assert.That(date.ToString("yyyy-MM-dd"), Is.EqualTo("2000-01-01"));
+        }
+
+        [Test]
+        public void Does_parse_unspecified_date_with_7sec_fraction_as_UTC()
+        {
+            JsConfig.AssumeUtc = true;
+            JsConfig.AlwaysUseUtc = true;
+
+            // var dateStr = "2014-08-27T14:30:23.123"; // Parsed OK
+            var dateStr = "2014-08-27T14:30:23.1230000";
+            var dateTime = dateStr.FromJson<DateTime>();
+
+            Assert.That(dateTime.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(dateTime.Hour, Is.EqualTo(14));
+            Assert.That(dateTime.Minute, Is.EqualTo(30));
+            Assert.That(dateTime.Second, Is.EqualTo(23));
+            Assert.That(dateTime.Millisecond, Is.EqualTo(123));
+
+            JsConfig.Reset();
         }
     }
 }
