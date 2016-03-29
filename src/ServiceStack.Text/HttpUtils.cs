@@ -39,14 +39,14 @@ namespace ServiceStack
             var qsPos = url.IndexOf('?');
             if (qsPos != -1)
             {
-                var existingKeyPos = qsPos + 1 == url.IndexOf(key, qsPos, PclExport.Instance.InvariantComparison) 
-                    ? qsPos 
+                var existingKeyPos = qsPos + 1 == url.IndexOf(key, qsPos, PclExport.Instance.InvariantComparison)
+                    ? qsPos
                     : url.IndexOf("&" + key, qsPos, PclExport.Instance.InvariantComparison);
 
                 if (existingKeyPos != -1)
                 {
                     var endPos = url.IndexOf('&', existingKeyPos + 1);
-                    if (endPos == -1) 
+                    if (endPos == -1)
                         endPos = url.Length;
 
                     var newUrl = url.Substring(0, existingKeyPos + key.Length + 1)
@@ -85,7 +85,7 @@ namespace ServiceStack
                 if (existingKeyPos != -1)
                 {
                     var endPos = url.IndexOf('/', existingKeyPos + 1);
-                    if (endPos == -1) 
+                    if (endPos == -1)
                         endPos = url.Length;
 
                     var newUrl = url.Substring(0, existingKeyPos + key.Length + 1)
@@ -538,29 +538,34 @@ namespace ServiceStack
             return status >= HttpStatusCode.InternalServerError && (int)status < 600;
         }
 
+        public static bool IsNotModified(this Exception ex)
+        {
+            return GetStatus(ex) == HttpStatusCode.NotModified;
+        }
+
         public static bool IsBadRequest(this Exception ex)
         {
-            return HasStatus(ex as WebException, HttpStatusCode.BadRequest);
+            return GetStatus(ex) == HttpStatusCode.BadRequest;
         }
 
         public static bool IsNotFound(this Exception ex)
         {
-            return HasStatus(ex as WebException, HttpStatusCode.NotFound);
+            return GetStatus(ex) == HttpStatusCode.NotFound;
         }
 
         public static bool IsUnauthorized(this Exception ex)
         {
-            return HasStatus(ex as WebException, HttpStatusCode.Unauthorized);
+            return GetStatus(ex) == HttpStatusCode.Unauthorized;
         }
 
         public static bool IsForbidden(this Exception ex)
         {
-            return HasStatus(ex as WebException, HttpStatusCode.Forbidden);
+            return GetStatus(ex) == HttpStatusCode.Forbidden;
         }
 
         public static bool IsInternalServerError(this Exception ex)
         {
-            return HasStatus(ex as WebException, HttpStatusCode.InternalServerError);
+            return GetStatus(ex) == HttpStatusCode.InternalServerError;
         }
 
         public static HttpStatusCode? GetResponseStatus(this string url)
@@ -582,19 +587,33 @@ namespace ServiceStack
 
         public static HttpStatusCode? GetStatus(this Exception ex)
         {
-            return GetStatus(ex as WebException);
+            if (ex == null)
+                return null;
+
+            var webEx = ex as WebException;
+            if (webEx != null)
+                return GetStatus(webEx);
+
+            var hasStatus = ex as IHasStatusCode;
+            if (hasStatus != null)
+                return (HttpStatusCode)hasStatus.StatusCode;
+
+            return null;
         }
 
         public static HttpStatusCode? GetStatus(this WebException webEx)
         {
             if (webEx == null) return null;
             var httpRes = webEx.Response as HttpWebResponse;
-            return httpRes != null ? httpRes.StatusCode : (HttpStatusCode?)null;
+            if (httpRes != null)
+                return httpRes.StatusCode;
+
+            return null;
         }
 
-        public static bool HasStatus(this WebException webEx, HttpStatusCode statusCode)
+        public static bool HasStatus(this Exception ex, HttpStatusCode statusCode)
         {
-            return GetStatus(webEx) == statusCode;
+            return GetStatus(ex) == statusCode;
         }
 
         public static string GetResponseBody(this Exception ex)
@@ -654,7 +673,7 @@ namespace ServiceStack
 
         public static Task<Stream> GetRequestStreamAsync(this WebRequest request)
         {
-            return GetRequestStreamAsync((HttpWebRequest) request);
+            return GetRequestStreamAsync((HttpWebRequest)request);
         }
 
         public static Task<Stream> GetRequestStreamAsync(this HttpWebRequest request)
@@ -752,7 +771,7 @@ namespace ServiceStack
 
             var contentLength = fileStream.Length + headerbytes.Length + boundarybytes.Length;
             PclExport.Instance.InitHttpWebRequest(httpReq,
-                contentLength:contentLength, allowAutoRedirect: false, keepAlive: false);
+                contentLength: contentLength, allowAutoRedirect: false, keepAlive: false);
 
             if (ResultsFilter != null)
             {
@@ -798,6 +817,17 @@ namespace ServiceStack
         }
     }
 
+    //Allow Exceptions to Customize HTTP StatusCode and StatusDescription returned
+    public interface IHasStatusCode
+    {
+        int StatusCode { get; }
+    }
+
+    public interface IHasStatusDescription
+    {
+        string StatusDescription { get; }
+    }
+
     public interface IHttpResultsFilter : IDisposable
     {
         string GetString(HttpWebRequest webReq, string reqBody);
@@ -816,7 +846,7 @@ namespace ServiceStack
         public Func<HttpWebRequest, byte[], byte[]> BytesResultFn { get; set; }
         public Action<HttpWebRequest, Stream, string> UploadFileFn { get; set; }
 
-        public HttpResultsFilter(string stringResult=null, byte[] bytesResult=null)
+        public HttpResultsFilter(string stringResult = null, byte[] bytesResult = null)
         {
             StringResult = stringResult;
             BytesResult = bytesResult;
@@ -1048,7 +1078,11 @@ namespace ServiceStack
 
         public const string IfModifiedSince = "If-Modified-Since";
 
+        public const string IfUnmodifiedSince = "If-Unmodified-Since";
+
         public const string IfNoneMatch = "If-None-Match";
+
+        public const string IfMatch = "If-Match";
 
         public const string LastModified = "Last-Modified";
 
@@ -1069,6 +1103,10 @@ namespace ServiceStack
         public const string SetCookie = "Set-Cookie";
 
         public const string ETag = "ETag";
+
+        public const string Age = "Age";
+
+        public const string Expires = "Expires";
 
         public const string Authorization = "Authorization";
 
@@ -1112,7 +1150,7 @@ namespace ServiceStack
             "ACL",        // RFC 3744
             "PATCH",      // https://datatracker.ietf.org/doc/draft-dusseault-http-patch/
             "SEARCH",     // https://datatracker.ietf.org/doc/draft-reschke-webdav-search/
-            "BCOPY", "BDELETE", "BMOVE", "BPROPFIND", "BPROPPATCH", "NOTIFY",  
+            "BCOPY", "BDELETE", "BMOVE", "BPROPFIND", "BPROPPATCH", "NOTIFY",
             "POLL",  "SUBSCRIBE", "UNSUBSCRIBE" //MS Exchange WebDav: http://msdn.microsoft.com/en-us/library/aa142917.aspx
         };
 
