@@ -147,9 +147,9 @@ namespace ServiceStack.Text.Tests.JsonTests
                     {Guid.NewGuid(), 25}
                 },
                 DateTimeTo_DictStrStr = new Dictionary<DateTime, Dictionary<string, string>> {
-					{DateTime.Today, new Dictionary<string, string> {{"a","b"},{"c","d"}}},
-					{DateTime.Now, new Dictionary<string, string> {{"a","b"},{"c","d"}}}
-				}
+                    {DateTime.Today, new Dictionary<string, string> {{"a","b"},{"c","d"}}},
+                    {DateTime.Now, new Dictionary<string, string> {{"a","b"},{"c","d"}}}
+                }
             };
             // see WriteDictionary.cs line 105
             // Problems:
@@ -169,9 +169,12 @@ namespace ServiceStack.Text.Tests.JsonTests
 
         static string DictStr(IDictionary d)
         {
-            var sb = new StringBuilder();
-            foreach (var key in d.Keys) { sb.AppendLine(key + " = " + d[key]); }
-            return sb.ToString();
+            var sb = StringBuilderCache.Allocate();
+            foreach (var key in d.Keys)
+            {
+                sb.AppendLine(key + " = " + d[key]);
+            }
+            return StringBuilderCache.ReturnAndFree(sb);
         }
 
         public class ModelWithHashSet

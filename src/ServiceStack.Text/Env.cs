@@ -1,4 +1,4 @@
-//Copyright (c) Service Stack LLC. All Rights Reserved.
+//Copyright (c) ServiceStack, Inc. All Rights Reserved.
 //License: https://raw.github.com/ServiceStack/ServiceStack/master/license.txt
 
 using System;
@@ -24,6 +24,19 @@ namespace ServiceStack.Text
 
                 IsAndroid = AssemblyUtils.FindType("Android.Manifest") != null;
 
+                try
+                {
+                    IsOSX = AssemblyUtils.FindType("Mono.AppKit") != null;
+#if NET45
+                    IsWindows = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("windir"));
+                    if (File.Exists(@"/System/Library/CoreServices/SystemVersion.plist"))
+                        IsOSX = true;
+                    string osType = File.Exists(@"/proc/sys/kernel/ostype") ? File.ReadAllText(@"/proc/sys/kernel/ostype") : null;
+                    IsLinux = osType?.IndexOf("Linux", StringComparison.OrdinalIgnoreCase) >= 0;
+#endif
+                }
+                catch (Exception ignore) {}
+
                 //Throws unhandled exception if not called from the main thread
                 //IsWinRT = AssemblyUtils.FindType("Windows.ApplicationModel") != null;
 
@@ -37,10 +50,24 @@ namespace ServiceStack.Text
             }
 
 #if PCL
-            IsUnix = IsMono;
-#else
+            IsUnix = IsMono || IsOSX || IsLinux;
+            IsWindows = !IsUnix;
+#elif NETSTANDARD1_1
+            try
+            {
+                IsLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
+                IsWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+                IsOSX  = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX);
+            }
+            catch (Exception ignore) {} //throws PlatformNotSupportedException in AWS lambda
+            IsUnix = IsOSX || IsLinux;
+            HasMultiplePlatformTargets = true;
+#elif NET45
             var platform = (int)Environment.OSVersion.Platform;
-            IsUnix = (platform == 4) || (platform == 6) || (platform == 128);
+            IsUnix = platform == 4 || platform == 6 || platform == 128;
+            IsLinux = IsUnix;
+            if (Environment.GetEnvironmentVariable("OS")?.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0)
+                IsWindows = true;
 #endif
 
             ServerUserAgent = "ServiceStack/" +
@@ -55,9 +82,15 @@ namespace ServiceStack.Text
 
         public static string VersionString { get; set; }
 
-        public static decimal ServiceStackVersion = 4.00m;
+        public static decimal ServiceStackVersion = 5.00m;
+
+        public static bool IsLinux { get; set; }
+
+        public static bool IsOSX { get; set; }
 
         public static bool IsUnix { get; set; }
+
+        public static bool IsWindows { get; set; }
 
         public static bool IsMono { get; set; }
 
@@ -75,7 +108,11 @@ namespace ServiceStack.Text
 
         public static bool SupportsEmit { get; set; }
 
+        public static bool StrictMode { get; set; }
+
         public static string ServerUserAgent { get; set; }
+
+        public static bool HasMultiplePlatformTargets { get; set; }
 
         private static readonly DateTime __releaseDate;
         public static DateTime GetReleaseDate()

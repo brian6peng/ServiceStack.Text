@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 using ServiceStack.Text.Common;
 using ServiceStack.Text.Json;
 
@@ -17,10 +16,19 @@ namespace ServiceStack.Text
         /// <summary>
         /// Get JSON string value converted to T
         /// </summary>
-        public static T Get<T>(this Dictionary<string, string> map, string key)
+        public static T Get<T>(this Dictionary<string, string> map, string key, T defaultValue = default(T))
         {
             string strVal;
-            return map.TryGetValue(key, out strVal) ? JsonSerializer.DeserializeFromString<T>(strVal) : default(T);
+            return map.TryGetValue(key, out strVal) ? JsonSerializer.DeserializeFromString<T>(strVal) : defaultValue;
+        }
+
+        public static T[] GetArray<T>(this Dictionary<string, string> map, string key)
+        {
+            var obj = map as JsonObject;
+            string value;
+            return map.TryGetValue(key, out value) 
+                ? (obj != null ? value.FromJson<T[]>() : value.FromJsv<T[]>()) 
+                : TypeConstants<T>.EmptyArray;
         }
 
         /// <summary>
@@ -171,6 +179,11 @@ namespace ServiceStack.Text
 
         public T ConvertTo<T>()
         {
+            return (T)this.ConvertTo(typeof(T));
+        }
+
+        public object ConvertTo(Type type)
+        {
             var map = new Dictionary<string, object>();
 
             foreach (var entry in this)
@@ -178,7 +191,7 @@ namespace ServiceStack.Text
                 map[entry.Key] = entry.Value;
             }
 
-            return (T)map.FromObjectDictionary(typeof(T));
+            return map.FromObjectDictionary(type);
         }
     }
 
@@ -204,20 +217,10 @@ namespace ServiceStack.Text
             this.json = json;
         }
 
-        public T As<T>()
-        {
-            return JsonSerializer.DeserializeFromString<T>(json);
-        }
+        public T As<T>() => JsonSerializer.DeserializeFromString<T>(json);
 
-        public override string ToString()
-        {
-            return json;
-        }
+        public override string ToString() => json;
 
-        public void WriteTo(ITypeSerializer serializer, TextWriter writer)
-        {
-            writer.Write(json ?? JsonUtils.Null);
-        }
+        public void WriteTo(ITypeSerializer serializer, TextWriter writer) => writer.Write(json ?? JsonUtils.Null);
     }
-
 }

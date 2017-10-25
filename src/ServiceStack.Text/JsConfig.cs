@@ -1,9 +1,8 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using System.Threading;
 using ServiceStack.Text.Common;
 using ServiceStack.Text.Json;
@@ -125,13 +124,13 @@ namespace ServiceStack.Text
                     case "escapeunicode":
                         scope.EscapeUnicode = boolValue;
                         break;
+                    case "ehc":
+                    case "escapehtmlchars":
+                        scope.EscapeHtmlChars = boolValue;
+                        break;
                     case "ipf":
                     case "includepublicfields":
                         scope.IncludePublicFields = boolValue;
-                        break;
-                    case "rsb":
-                    case "reuseStringBuffer":
-                        scope.ReuseStringBuffer = boolValue;
                         break;
                     case "dh":
                     case "datehandler":
@@ -232,10 +231,10 @@ namespace ServiceStack.Text
             bool? appendUtcOffset = null,
             bool? escapeUnicode = null,
             bool? includePublicFields = null,
-            bool? reuseStringBuffer = null,
             int? maxDepth = null,
             EmptyCtorFactoryDelegate modelFactory = null,
-            string[] excludePropertyReferences = null)
+            string[] excludePropertyReferences = null,
+            bool? useSystemParseMethods = null)
         {
             return new JsConfigScope
             {
@@ -269,12 +268,28 @@ namespace ServiceStack.Text
                 AppendUtcOffset = appendUtcOffset ?? sAppendUtcOffset,
                 EscapeUnicode = escapeUnicode ?? sEscapeUnicode,
                 IncludePublicFields = includePublicFields ?? sIncludePublicFields,
-                ReuseStringBuffer = reuseStringBuffer ?? sReuseStringBuffer,
                 MaxDepth = maxDepth ?? sMaxDepth,
                 ModelFactory = modelFactory ?? ModelFactory,
-                ExcludePropertyReferences = excludePropertyReferences ?? sExcludePropertyReferences
+                ExcludePropertyReferences = excludePropertyReferences ?? sExcludePropertyReferences,
+                UseSystemParseMethods = useSystemParseMethods ?? sUseSystemParseMethods
             };
         }
+
+        private static bool? sUseSystemParseMethods;
+        public static bool UseSystemParseMethods
+        {
+            get
+            {
+                return (JsConfigScope.Current != null ? JsConfigScope.Current.UseSystemParseMethods : null)
+                       ?? sUseSystemParseMethods
+                       ?? false;
+            }
+            set
+            {
+                if (!sConvertObjectTypesIntoStringDictionary.HasValue) sConvertObjectTypesIntoStringDictionary = value;
+            }
+        }
+
 
         private static bool? sConvertObjectTypesIntoStringDictionary;
         public static bool ConvertObjectTypesIntoStringDictionary
@@ -318,6 +333,21 @@ namespace ServiceStack.Text
             set
             {
                 if (!sTryToParseNumericType.HasValue) sTryToParseNumericType = value;
+            }
+        }
+
+        private static bool? sTryParseIntoBestFit;
+        public static bool TryParseIntoBestFit
+        {
+            get
+            {
+                return (JsConfigScope.Current != null ? JsConfigScope.Current.TryParseIntoBestFit : null)
+                       ?? sTryParseIntoBestFit
+                       ?? false;
+            }
+            set
+            {
+                if (!sTryParseIntoBestFit.HasValue) sTryParseIntoBestFit = value;
             }
         }
 
@@ -756,12 +786,31 @@ namespace ServiceStack.Text
             get
             {
                 return (JsConfigScope.Current != null ? JsConfigScope.Current.EscapeUnicode : null)
-                    ?? sEscapeUnicode
-                    ?? false;
+                       ?? sEscapeUnicode
+                       ?? false;
             }
             set
             {
                 if (!sEscapeUnicode.HasValue) sEscapeUnicode = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating if HTML entity chars [&gt; &lt; &amp; = '] should be escaped as "\uXXXX".
+        /// </summary>
+        private static bool? sEscapeHtmlChars;
+        public static bool EscapeHtmlChars
+        {
+            // obeying the use of ThreadStatic, but allowing for setting JsConfig once as is the normal case
+            get
+            {
+                return (JsConfigScope.Current != null ? JsConfigScope.Current.EscapeHtmlChars : null)
+                       ?? sEscapeHtmlChars
+                       ?? false;
+            }
+            set
+            {
+                if (!sEscapeHtmlChars.HasValue) sEscapeHtmlChars = value;
             }
         }
 
@@ -826,25 +875,6 @@ namespace ServiceStack.Text
             set
             {
                 if (!sIncludePublicFields.HasValue) sIncludePublicFields = value;
-            }
-        }
-
-        /// <summary>
-        /// For extra serialization performance you can re-use a ThreadStatic StringBuilder
-        /// when serializing to a JSON String.
-        /// </summary>
-        private static bool? sReuseStringBuffer;
-        public static bool ReuseStringBuffer
-        {
-            get
-            {
-                return (JsConfigScope.Current != null ? JsConfigScope.Current.ReuseStringBuffer : null)
-                    ?? sReuseStringBuffer
-                    ?? true;
-            }
-            set
-            {
-                if (!sReuseStringBuffer.HasValue) sReuseStringBuffer = value;
             }
         }
 
@@ -920,6 +950,16 @@ namespace ServiceStack.Text
             get { return ReflectionExtensions.IgnoreAttributesNamed; }
         }
 
+        public static HashSet<string> AllowRuntimeTypeWithAttributesNamed { get; set; }
+
+        public static HashSet<string> AllowRuntimeTypeWithInterfacesNamed { get; set; }
+
+        public static HashSet<string> AllowRuntimeTypeInTypes { get; set; }
+
+        public static HashSet<string> AllowRuntimeTypeInTypesWithNamespaces { get; set; }
+
+        public static Func<Type, bool> AllowRuntimeType { get; set; }
+
         public static void Reset()
         {
             foreach (var rawSerializeType in HasSerializeFn.ToArray())
@@ -938,6 +978,7 @@ namespace ServiceStack.Text
             sModelFactory = ReflectionExtensions.GetConstructorMethodToCache;
             sTryToParsePrimitiveTypeValues = null;
             sTryToParseNumericType = null;
+            sTryParseIntoBestFit = null;
             sConvertObjectTypesIntoStringDictionary = null;
             sExcludeDefaultValues = null;
             sIncludeNullValues = null;
@@ -961,9 +1002,9 @@ namespace ServiceStack.Text
             sSkipDateTimeConversion = null;
             sAppendUtcOffset = null;
             sEscapeUnicode = null;
+            sEscapeHtmlChars = null;
             sOnDeserializationError = null;
             sIncludePublicFields = null;
-            sReuseStringBuffer = null;
             HasSerializeFn = new HashSet<Type>();
             HasIncludeDefaultValue = new HashSet<Type>();
             TreatValueAsRefTypes = new HashSet<Type> { typeof(KeyValuePair<,>) };
@@ -974,6 +1015,29 @@ namespace ServiceStack.Text
             sMaxDepth = 50;
             sParsePrimitiveIntegerTypes = null;
             sParsePrimitiveFloatingPointTypes = null;
+            AllowRuntimeType = null;
+            AllowRuntimeTypeWithAttributesNamed = new HashSet<string>
+            {
+                nameof(DataContractAttribute),
+                nameof(RuntimeSerializableAttribute),
+            };
+            AllowRuntimeTypeWithInterfacesNamed = new HashSet<string>
+            {
+                "IConvertible",
+                "ISerializable",
+                "IRuntimeSerializable",
+                "IMeta",
+                "IReturn`1",
+                "IReturnVoid",
+            };
+            AllowRuntimeTypeInTypesWithNamespaces = new HashSet<string>
+            {
+                "ServiceStack.Messaging",
+            };
+            AllowRuntimeTypeInTypes = new HashSet<string>
+            {
+                "ServiceStack.RequestLogEntry"
+            };
             PlatformExtensions.ClearRuntimeAttributes();
             ReflectionExtensions.Reset();
             JsState.Reset();
@@ -1121,7 +1185,7 @@ namespace ServiceStack.Text
         public static Func<T, T> OnSerializingFn
         {
             get { return onSerializingFn; }
-            set { onSerializingFn = value; Refresh(); }
+            set { onSerializingFn = value; RefreshWrite(); }
         }
 
         /// <summary>
@@ -1131,7 +1195,7 @@ namespace ServiceStack.Text
         public static Action<T> OnSerializedFn
         {
             get { return onSerializedFn; }
-            set { onSerializedFn = value; Refresh(); }
+            set { onSerializedFn = value; RefreshWrite(); }
         }
 
         /// <summary>
@@ -1141,7 +1205,7 @@ namespace ServiceStack.Text
         public static Func<string, T> DeSerializeFn
         {
             get { return deSerializeFn; }
-            set { deSerializeFn = value; Refresh(); }
+            set { deSerializeFn = value; RefreshRead(); }
         }
 
         /// <summary>
@@ -1151,7 +1215,7 @@ namespace ServiceStack.Text
         public static Func<string, T> RawDeserializeFn
         {
             get { return rawDeserializeFn; }
-            set { rawDeserializeFn = value; Refresh(); }
+            set { rawDeserializeFn = value; RefreshRead(); }
         }
 
         public static bool HasDeserializeFn
@@ -1163,7 +1227,7 @@ namespace ServiceStack.Text
         public static Func<T, T> OnDeserializedFn
         {
             get { return onDeserializedFn; }
-            set { onDeserializedFn = value; Refresh(); }
+            set { onDeserializedFn = value; RefreshRead(); }
         }
 
         public static bool HasDeserialingFn
@@ -1175,7 +1239,7 @@ namespace ServiceStack.Text
         public static Func<T, string, object, object> OnDeserializingFn
         {
             get { return onDeserializingFn; }
-            set { onDeserializingFn = value; Refresh(); }
+            set { onDeserializingFn = value; RefreshRead(); }
         }
 
         /// <summary>
@@ -1269,11 +1333,15 @@ namespace ServiceStack.Text
             EmitCamelCaseNames = EmitLowercaseUnderscoreNames = IncludeTypeInfo = ExcludeTypeInfo = null;
         }
 
-        public static void Refresh()
+        public static void RefreshRead()
         {
             JsonReader<T>.Refresh();
-            JsonWriter<T>.Refresh();
             JsvReader<T>.Refresh();
+        }
+
+        public static void RefreshWrite()
+        {
+            JsonWriter<T>.Refresh();
             JsvWriter<T>.Refresh();
         }
     }

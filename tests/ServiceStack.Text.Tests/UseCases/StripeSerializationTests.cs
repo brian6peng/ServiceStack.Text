@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using ServiceStack.Stripe;
 using ServiceStack.Stripe.Types;
@@ -16,7 +17,7 @@ namespace ServiceStack.Text.Tests.UseCases
             QueryStringSerializer.ComplexTypeStrategy = QueryStringStrategy.FormUrlEncoded;
         }
 
-        [TestFixtureTearDown]
+        [OneTimeTearDown]
         public void TestFixtureTearDown()
         {
             JsConfig.Reset();
@@ -47,10 +48,29 @@ namespace ServiceStack.Text.Tests.UseCases
                 Email = "Email",
                 Quantity = 1,
                 TrialEnd = new DateTime(2014, 1, 1),
+                Metadata = new Dictionary<string, string> { { "order_id", "1234" } },
             };
 
             var qs = QueryStringSerializer.SerializeToString(dto);
             qs.Print();
+        }
+
+        [Test]
+        public void Serializes_Customer_Metadata()
+        {
+            var dto = new CreateStripeCustomer
+            {
+                AccountBalance = 100,
+                Metadata = new Dictionary<string, string>
+                {
+                    { "order_id", "1234" },
+                    { "ref_id", "456" },
+                },
+            };
+
+            var qs = QueryStringSerializer.SerializeToString(dto);
+            qs.Print();
+            Assert.That(qs, Is.EqualTo("account_balance=100&metadata[order_id]=1234&metadata[ref_id]=456"));
         }
 
         [Test]
@@ -109,7 +129,7 @@ namespace ServiceStack.Text.Tests.UseCases
                 Email = "the@email.com",
                 LegalEntity = new StripeLegalEntity
                 {
-                    Dob = new StripeDob
+                    Dob = new StripeDate
                     {
                         Day = 1,
                         Month = 1,
@@ -127,8 +147,32 @@ namespace ServiceStack.Text.Tests.UseCases
             var qs = QueryStringSerializer.SerializeToString(dto);
             qs.Print();
 
-            Assert.That(qs, Is.StringContaining(
+            Assert.That(qs, Does.Contain(
                 @"&legal_entity[dob][year]=1970&legal_entity[dob][month]=1&legal_entity[dob][day]=1"));
+        }
+
+        public class StripeCreateSubscription
+        {
+            public string customer { get; set; }
+
+            public Dictionary<string, string> metadata { get; set; }
+
+            public string plan { get; set; }
+        }
+
+        [Test]
+        public void QueryStringSerializer_emits_empty_string_without_quotes()
+        {
+            var qs = QueryStringSerializer.SerializeToString(new StripeCreateSubscription
+            {
+                metadata = new Dictionary<string, string>
+                {
+                    { "foo", string.Empty },
+                    { "bar", "qux" }
+                }
+            });
+
+            Assert.That(qs, Is.EqualTo("metadata[foo]=&metadata[bar]=qux"));
         }
     }
 }

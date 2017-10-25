@@ -1,4 +1,4 @@
-﻿//Copyright (c) Service Stack LLC. All Rights Reserved.
+﻿//Copyright (c) ServiceStack, Inc. All Rights Reserved.
 //License: https://raw.github.com/ServiceStack/ServiceStack/master/license.txt
 
 #if NETFX_CORE
@@ -128,10 +128,6 @@ namespace ServiceStack
         //    // .Net 4.0+ does this under the hood anyway.
         //    return TimeZoneInfo.ConvertTimeToUtc(dateTime);
         //}
-
-        public override void VerifyInAssembly(Type accessType, ICollection<string> assemblyNames)
-        {
-        }
 
         public static void InitForAot()
         {

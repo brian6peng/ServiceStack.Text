@@ -1,4 +1,4 @@
-﻿// Copyright (c) Service Stack LLC. All Rights Reserved.
+﻿// Copyright (c) ServiceStack, Inc. All Rights Reserved.
 // License: https://raw.github.com/ServiceStack/ServiceStack/master/license.txt
 
 using System;
@@ -146,6 +146,16 @@ namespace ServiceStack
 
             if (iterationTask != null)
                 iterationTask.ContinueWith(next, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        public static void Sleep(int timeMs)
+        {
+            Thread.Sleep(timeMs);
+        }
+
+        public static void Sleep(TimeSpan time)
+        {
+            Thread.Sleep(time);
         }
     }
 }

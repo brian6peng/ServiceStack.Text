@@ -152,6 +152,41 @@ namespace ServiceStack.Text.Common
                     break;
             }
         }
+
+        public static void AssertAllowedRuntimeType(Type type)
+        {
+            if (!JsState.IsRuntimeType)
+                return;
+
+            if (JsConfig.AllowRuntimeType?.Invoke(type) == true)
+                return;
+
+            var allowAttributesNamed = JsConfig.AllowRuntimeTypeWithAttributesNamed;
+            if (allowAttributesNamed?.Count > 0)
+            {
+                var OAttrs = type.AllAttributes();
+                foreach (var oAttr in OAttrs)
+                {
+                    var attr = oAttr as Attribute;
+                    if (attr == null) continue;
+                    if (allowAttributesNamed.Contains(attr.GetType().Name))
+                        return;
+                }
+            }
+
+            var allowInterfacesNamed = JsConfig.AllowRuntimeTypeWithInterfacesNamed;
+            if (allowInterfacesNamed?.Count > 0)
+            {
+                var interfaces = type.GetTypeInterfaces();
+                foreach (var interfaceType in interfaces)
+                {
+                    if (allowInterfacesNamed.Contains(interfaceType.Name))
+                        return;
+                }
+            }
+
+            throw new NotSupportedException($"{type.Name} is not an allowed Runtime Type. Whitelist Type with [RuntimeSerializable] or IRuntimeSerializable.");
+        }
     }
 
     public class JsWriter<TSerializer>
@@ -193,6 +228,8 @@ namespace ServiceStack.Text.Common
 
                 if (typeCode == TypeCode.Byte)
                     return Serializer.WriteByte;
+                if (typeCode == TypeCode.SByte)
+                    return Serializer.WriteSByte;
 
                 if (typeCode == TypeCode.Int16)
                     return Serializer.WriteInt16;
@@ -300,7 +337,7 @@ namespace ServiceStack.Text.Common
 
         private WriteObjectDelegate GetCoreWriteFn<T>()
         {
-            if ((typeof(T).IsValueType() && !JsConfig.TreatAsRefType(typeof(T))) || JsConfig<T>.HasSerializeFn)
+            if (typeof(T).IsValueType() && !JsConfig.TreatAsRefType(typeof(T)) || JsConfig<T>.HasSerializeFn)
             {
                 return JsConfig<T>.HasSerializeFn
                     ? JsConfig<T>.WriteFn<TSerializer>

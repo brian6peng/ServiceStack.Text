@@ -5,7 +5,7 @@
 // Authors:
 //   Demis Bellot (demis.bellot@gmail.com)
 //
-// Copyright 2012 Service Stack LLC. All Rights Reserved.
+// Copyright 2012 ServiceStack, Inc. All Rights Reserved.
 //
 // Licensed under the same terms of ServiceStack.
 //
@@ -21,6 +21,7 @@ using System.Text;
 using System.Threading;
 using ServiceStack.Text;
 using ServiceStack.Text.Common;
+using ServiceStack.Text.Json;
 using ServiceStack.Text.Jsv;
 
 namespace ServiceStack
@@ -86,12 +87,9 @@ namespace ServiceStack
 
         public static string SerializeToString<T>(T value)
         {
-            var sb = new StringBuilder();
-            using (var writer = new StringWriter(sb, CultureInfo.InvariantCulture))
-            {
-                GetWriteFn(value.GetType())(writer, value);
-            }
-            return sb.ToString();
+            var writer = StringWriterThreadStatic.Allocate();
+            GetWriteFn(value.GetType())(writer, value);
+            return StringWriterThreadStatic.ReturnAndFree(writer);
         }
     }
 
@@ -155,6 +153,7 @@ namespace ServiceStack
             {
                 JsState.QueryStringMode = true;
 
+                var isObjectDictionary = typeof(T) == typeof(Dictionary<string, object>);
                 var map = (IDictionary)oMap;
                 var ranOnce = false;
                 foreach (var key in map.Keys)
@@ -168,7 +167,7 @@ namespace ServiceStack
                         writeKeyFn = Serializer.GetWriteFn(keyType);
                     }
 
-                    if (writeValueFn == null)
+                    if (writeValueFn == null || isObjectDictionary)
                         writeValueFn = Serializer.GetWriteFn(dictionaryValue.GetType());
 
                     if (ranOnce)
@@ -238,10 +237,40 @@ namespace ServiceStack
 
         public static bool FormUrlEncoded(TextWriter writer, string propertyName, object obj)
         {
+            var map = obj as IDictionary;
+            if (map != null)
+            {
+                var i = 0;
+                foreach (var key in map.Keys)
+                {
+                    if (i++ > 0)
+                        writer.Write('&');
+
+                    var value = map[key];
+                    writer.Write(propertyName);
+                    writer.Write('[');
+                    writer.Write(key.ToString());
+                    writer.Write("]=");
+
+                    if (value == null)
+                    {
+                        writer.Write(JsonUtils.Null);
+                    }
+                    else if (value is string strValue && strValue == string.Empty) { /*ignore*/ }
+                    else
+                    {
+                        var writeFn = JsvWriter.GetWriteFn(value.GetType());
+                        writeFn(writer, value);
+                    }
+                }
+
+                return true;
+            }
+
             var typeConfig = typeConfigCache.GetOrAdd(obj.GetType(), t =>
                 {
                     var genericType = typeof(PropertyTypeConfig<>).MakeGenericType(t);
-                    var fi = genericType.Fields().First(x => x.Name == "Config"); ;
+                    var fi = genericType.Fields().First(x => x.Name == "Config");
 
                     var config = (PropertyTypeConfig)fi.GetValue(null);
                     return config;

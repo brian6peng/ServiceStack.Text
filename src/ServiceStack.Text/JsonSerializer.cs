@@ -5,13 +5,12 @@
 // Authors:
 //   Demis Bellot (demis.bellot@gmail.com)
 //
-// Copyright 2012 Service Stack LLC. All Rights Reserved.
+// Copyright 2012 ServiceStack, Inc. All Rights Reserved.
 //
 // Licensed under the same terms of ServiceStack.
 //
 
 using System;
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -30,7 +29,7 @@ namespace ServiceStack.Text
             JsConfig.InitStatics();
         }
 
-        public static UTF8Encoding UTF8Encoding = new UTF8Encoding(false); //Don't emit UTF8 BOM by default
+        public static Encoding UTF8Encoding = PclExport.Instance.GetUTF8Encoding(false);
 
         public static T DeserializeFromString<T>(string value)
         {
@@ -54,57 +53,7 @@ namespace ServiceStack.Text
         {
             return DeserializeFromString(reader.ReadToEnd(), type);
         }
-
-        [ThreadStatic] //Reuse the thread static StringBuilder when serializing to strings
-        private static StringBuilderWriter LastWriter;
-
-        internal class StringBuilderWriter : IDisposable
-        {
-            protected StringBuilder sb;
-            protected StringWriter writer;
-
-            public StringWriter Writer
-            {
-                get { return writer; }
-            }
-
-            public StringBuilderWriter()
-            {
-                this.sb = new StringBuilder();
-                this.writer = new StringWriter(sb, CultureInfo.InvariantCulture);
-            }
-
-            public static StringBuilderWriter Create()
-            {
-                var ret = LastWriter;
-                if (JsConfig.ReuseStringBuffer && ret != null)
-                {
-                    LastWriter = null;
-                    ret.sb.Clear();
-                    return ret;
-                }
-
-                return new StringBuilderWriter();
-            }
-
-            public override string ToString()
-            {
-                return sb.ToString();
-            }
-
-            public void Dispose()
-            {
-                if (JsConfig.ReuseStringBuffer)
-                {
-                    LastWriter = this;
-                }
-                else
-                {
-                    Writer.Dispose();
-                }
-            }
-        }
-
+        
         public static string SerializeToString<T>(T value)
         {
             if (value == null || value is Delegate) return null;
@@ -120,36 +69,32 @@ namespace ServiceStack.Text
                 return result;
             }
 
-            using (var sb = StringBuilderWriter.Create())
+            var writer = StringWriterThreadStatic.Allocate();
+            if (typeof(T) == typeof(string))
             {
-                if (typeof(T) == typeof(string))
-                {
-                    JsonUtils.WriteString(sb.Writer, value as string);
-                }
-                else
-                {
-                    JsonWriter<T>.WriteRootObject(sb.Writer, value);
-                }
-                return sb.ToString();
+                JsonUtils.WriteString(writer, value as string);
             }
+            else
+            {
+                JsonWriter<T>.WriteRootObject(writer, value);
+            }
+            return StringWriterThreadStatic.ReturnAndFree(writer);
         }
 
         public static string SerializeToString(object value, Type type)
         {
             if (value == null) return null;
 
-            using (var sb = StringBuilderWriter.Create())
+            var writer = StringWriterThreadStatic.Allocate();
+            if (type == typeof(string))
             {
-                if (type == typeof(string))
-                {
-                    JsonUtils.WriteString(sb.Writer, value as string);
-                }
-                else
-                {
-                    JsonWriter.GetWriteFn(type)(sb.Writer, value);
-                }
-                return sb.ToString();
+                JsonUtils.WriteString(writer, value as string);
             }
+            else
+            {
+                JsonWriter.GetWriteFn(type)(writer, value);
+            }
+            return StringWriterThreadStatic.ReturnAndFree(writer);
         }
 
         public static void SerializeToWriter<T>(T value, TextWriter writer)

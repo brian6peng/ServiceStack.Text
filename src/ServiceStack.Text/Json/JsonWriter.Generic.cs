@@ -1,4 +1,4 @@
-//Copyright (c) Service Stack LLC. All Rights Reserved.
+//Copyright (c) ServiceStack, Inc. All Rights Reserved.
 //License: https://raw.github.com/ServiceStack/ServiceStack/master/license.txt
 
 using System;
@@ -44,8 +44,10 @@ namespace ServiceStack.Text.Json
                 do
                 {
                     snapshot = WriteFnCache;
-                    newCache = new Dictionary<Type, WriteObjectDelegate>(WriteFnCache);
-                    newCache[type] = writeFn;
+                    newCache = new Dictionary<Type, WriteObjectDelegate>(WriteFnCache)
+                    {
+                        [type] = writeFn
+                    };
 
                 } while (!ReferenceEquals(
                     Interlocked.CompareExchange(ref WriteFnCache, newCache, snapshot), snapshot));
@@ -77,8 +79,10 @@ namespace ServiceStack.Text.Json
                 do
                 {
                     snapshot = JsonTypeInfoCache;
-                    newCache = new Dictionary<Type, TypeInfo>(JsonTypeInfoCache);
-                    newCache[type] = writeFn;
+                    newCache = new Dictionary<Type, TypeInfo>(JsonTypeInfoCache)
+                    {
+                        [type] = writeFn
+                    };
 
                 } while (!ReferenceEquals(
                     Interlocked.CompareExchange(ref JsonTypeInfoCache, newCache, snapshot), snapshot));
@@ -194,7 +198,7 @@ namespace ServiceStack.Text.Json
 #if __IOS__
 			if (writer == null) return;
 #endif
-            TypeConfig<T>.AssertValidUsage();
+            TypeConfig<T>.Init();
 
             try
             {
@@ -218,7 +222,7 @@ namespace ServiceStack.Text.Json
 #if __IOS__
 			if (writer == null) return;
 #endif
-            TypeConfig<T>.AssertValidUsage();
+            TypeConfig<T>.Init();
 
             JsState.Depth = 0;
             CacheFn(writer, value);

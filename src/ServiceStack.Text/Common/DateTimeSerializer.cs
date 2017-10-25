@@ -5,7 +5,7 @@
 // Authors:
 //   Demis Bellot (demis.bellot@gmail.com)
 //
-// Copyright 2012 Service Stack LLC. All Rights Reserved.
+// Copyright 2012 ServiceStack, Inc. All Rights Reserved.
 //
 // Licensed under the same terms of ServiceStack.
 //
@@ -17,6 +17,7 @@ using System.Text;
 using ServiceStack.Text.Json;
 using ServiceStack.Text.Support;
 using System.Text.RegularExpressions;
+using ServiceStack.Text.Pools;
 
 namespace ServiceStack.Text.Common
 {
@@ -337,7 +338,7 @@ namespace ServiceStack.Text.Common
 
         public static string ToDateTimeString(DateTime dateTime)
         {
-            return dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormat);
+            return dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormat, CultureInfo.InvariantCulture);
         }
 
         public static DateTime ParseDateTime(string dateTimeStr)
@@ -445,7 +446,7 @@ namespace ServiceStack.Text.Common
 
             var isStartOfDay = timeOfDay.Ticks == 0;
             if (isStartOfDay && !JsConfig.SkipDateTimeConversion)
-                return dateTime.ToString(ShortDateTimeFormat);
+                return dateTime.ToString(ShortDateTimeFormat, CultureInfo.InvariantCulture);
 
             var hasFractionalSecs = (timeOfDay.Milliseconds != 0)
                 || (timeOfDay.Ticks % TimeSpan.TicksPerMillisecond != 0);
@@ -454,25 +455,25 @@ namespace ServiceStack.Text.Common
             {
                 if (!hasFractionalSecs)
                     return dateTime.Kind == DateTimeKind.Local
-                        ? dateTime.ToString(DateTimeFormatSecondsUtcOffset)
+                        ? dateTime.ToString(DateTimeFormatSecondsUtcOffset, CultureInfo.InvariantCulture)
                         : dateTime.Kind == DateTimeKind.Unspecified
-                        ? dateTime.ToString(DateTimeFormatSecondsNoOffset)
-                        : dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormatSeconds);
+                        ? dateTime.ToString(DateTimeFormatSecondsNoOffset, CultureInfo.InvariantCulture)
+                        : dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormatSeconds, CultureInfo.InvariantCulture);
 
                 return dateTime.Kind == DateTimeKind.Local
-                    ? dateTime.ToString(DateTimeFormatTicksUtcOffset)
+                    ? dateTime.ToString(DateTimeFormatTicksUtcOffset, CultureInfo.InvariantCulture)
                     : dateTime.Kind == DateTimeKind.Unspecified
-                    ? dateTime.ToString(DateTimeFormatTicksNoUtcOffset)
+                    ? dateTime.ToString(DateTimeFormatTicksNoUtcOffset, CultureInfo.InvariantCulture)
                     : PclExport.Instance.ToXsdDateTimeString(dateTime);
             }
 
             if (!hasFractionalSecs)
                 return dateTime.Kind != DateTimeKind.Utc
-                    ? dateTime.ToString(DateTimeFormatSecondsUtcOffset)
-                    : dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormatSeconds);
+                    ? dateTime.ToString(DateTimeFormatSecondsUtcOffset, CultureInfo.InvariantCulture)
+                    : dateTime.ToStableUniversalTime().ToString(XsdDateTimeFormatSeconds, CultureInfo.InvariantCulture);
 
             return dateTime.Kind != DateTimeKind.Utc
-                ? dateTime.ToString(DateTimeFormatTicksUtcOffset)
+                ? dateTime.ToString(DateTimeFormatTicksUtcOffset, CultureInfo.InvariantCulture)
                 : PclExport.Instance.ToXsdDateTimeString(dateTime);
         }
 
@@ -588,25 +589,20 @@ namespace ServiceStack.Text.Common
                 dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
             }
 
-            if (JsConfig.DateHandler == DateHandler.ISO8601)
+            switch (JsConfig.DateHandler)
             {
-                writer.Write(dateTime.ToString("o", CultureInfo.InvariantCulture));
-                return;
-            }
-            if (JsConfig.DateHandler == DateHandler.ISO8601DateOnly)
-            {
-                writer.Write(dateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-                return;
-            }
-            if (JsConfig.DateHandler == DateHandler.ISO8601DateTime)
-            {
-                writer.Write(dateTime.ToString("yyyy-MM-dd hh:mm:ss", CultureInfo.InvariantCulture));
-                return;
-            }
-            if (JsConfig.DateHandler == DateHandler.RFC1123)
-            {
-                writer.Write(dateTime.ToUniversalTime().ToString("R", CultureInfo.InvariantCulture));
-                return;
+                case DateHandler.ISO8601:
+                    writer.Write(dateTime.ToString("o", CultureInfo.InvariantCulture));
+                    return;
+                case DateHandler.ISO8601DateOnly:
+                    writer.Write(dateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                    return;
+                case DateHandler.ISO8601DateTime:
+                    writer.Write(dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+                    return;
+                case DateHandler.RFC1123:
+                    writer.Write(dateTime.ToUniversalTime().ToString("R", CultureInfo.InvariantCulture));
+                    return;
             }
 
             var timestamp = dateTime.ToUnixTimeMs();
@@ -637,11 +633,11 @@ namespace ServiceStack.Text.Common
 
         public static string ToWcfJsonDate(DateTime dateTime)
         {
-            var sb = new StringBuilder();
+            var sb = StringBuilderThreadStatic.Allocate();
             using (var writer = new StringWriter(sb))
             {
                 WriteWcfJsonDate(writer, dateTime);
-                return sb.ToString();
+                return StringBuilderThreadStatic.ReturnAndFree(sb);
             }
         }
 
@@ -669,11 +665,11 @@ namespace ServiceStack.Text.Common
 
         public static string ToWcfJsonDateTimeOffset(DateTimeOffset dateTimeOffset)
         {
-            var sb = new StringBuilder();
+            var sb = StringBuilderThreadStatic.Allocate();
             using (var writer = new StringWriter(sb))
             {
                 WriteWcfJsonDateTimeOffset(writer, dateTimeOffset);
-                return sb.ToString();
+                return StringBuilderThreadStatic.ReturnAndFree(sb);
             }
         }
     }

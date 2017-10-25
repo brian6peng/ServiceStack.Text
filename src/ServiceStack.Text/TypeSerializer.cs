@@ -5,18 +5,21 @@
 // Authors:
 //   Demis Bellot (demis.bellot@gmail.com)
 //
-// Copyright 2012 Service Stack LLC. All Rights Reserved.
+// Copyright 2012 ServiceStack, Inc. All Rights Reserved.
 //
 // Licensed under the same terms of ServiceStack.
 //
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using ServiceStack.Text.Common;
 using ServiceStack.Text.Jsv;
+using ServiceStack.Text.Pools;
 
 namespace ServiceStack.Text
 {
@@ -30,7 +33,7 @@ namespace ServiceStack.Text
             JsConfig.InitStatics();
         }
 
-        public static UTF8Encoding UTF8Encoding = new UTF8Encoding(false); //Don't emit UTF8 BOM by default
+        public static Encoding UTF8Encoding = PclExport.Instance.GetUTF8Encoding(false);
 
         public const string DoubleQuoteString = "\"\"";
 
@@ -79,57 +82,7 @@ namespace ServiceStack.Text
         {
             return DeserializeFromString(reader.ReadToEnd(), type);
         }
-
-        [ThreadStatic] //Reuse the thread static StringBuilder when serializing to strings
-        private static StringBuilderWriter LastWriter;
-
-        internal class StringBuilderWriter : IDisposable
-        {
-            protected StringBuilder sb;
-            protected StringWriter writer;
-
-            public StringWriter Writer
-            {
-                get { return writer; }
-            }
-
-            public StringBuilderWriter()
-            {
-                this.sb = new StringBuilder();
-                this.writer = new StringWriter(sb, CultureInfo.InvariantCulture);
-            }
-
-            public static StringBuilderWriter Create()
-            {
-                var ret = LastWriter;
-                if (JsConfig.ReuseStringBuffer && ret != null)
-                {
-                    LastWriter = null;
-                    ret.sb.Clear();
-                    return ret;
-                }
-
-                return new StringBuilderWriter();
-            }
-
-            public override string ToString()
-            {
-                return sb.ToString();
-            }
-
-            public void Dispose()
-            {
-                if (JsConfig.ReuseStringBuffer)
-                {
-                    LastWriter = this;
-                }
-                else
-                {
-                    Writer.Dispose();
-                }
-            }
-        }
-
+        
         public static string SerializeToString<T>(T value)
         {
             if (value == null || value is Delegate) return null;
@@ -145,12 +98,9 @@ namespace ServiceStack.Text
                 return result;
             }
 
-            using (var sb = StringBuilderWriter.Create())
-            {
-                JsvWriter<T>.WriteRootObject(sb.Writer, value);
-
-                return sb.ToString();
-            }
+            var writer = StringWriterThreadStatic.Allocate();
+            JsvWriter<T>.WriteRootObject(writer, value);
+            return StringWriterThreadStatic.ReturnAndFree(writer);
         }
 
         public static string SerializeToString(object value, Type type)
@@ -159,12 +109,9 @@ namespace ServiceStack.Text
             if (type == typeof(string))
                 return value as string;
 
-            using (var sb = StringBuilderWriter.Create())
-            {
-                JsvWriter.GetWriteFn(type)(sb.Writer, value);
-
-                return sb.ToString();
-            }
+            var writer = StringWriterThreadStatic.Allocate();
+            JsvWriter.GetWriteFn(type)(writer, value);
+            return StringWriterThreadStatic.ReturnAndFree(writer);
         }
 
         public static void SerializeToWriter<T>(T value, TextWriter writer)
@@ -257,8 +204,34 @@ namespace ServiceStack.Text
         /// Useful extension method to get the Dictionary[string,string] representation of any POCO type.
         /// </summary>
         /// <returns></returns>
-        public static Dictionary<string, string> ToStringDictionary<T>(this T obj)
+        public static Dictionary<string, string> ToStringDictionary(this object obj)
         {
+            if (obj == null)
+                return new Dictionary<string, string>();
+
+            if (obj is Dictionary<string, string> strDictionary)
+                return strDictionary;
+
+            if (obj is IEnumerable<KeyValuePair<string, string>> kvpStrings)
+            {
+                var to = new Dictionary<string, string>();
+                foreach (var kvp in kvpStrings)
+                {
+                    to[kvp.Key] = kvp.Value;
+                }
+                return to;
+            }
+
+            if (obj is IEnumerable<KeyValuePair<string, object>> kvps)
+            {
+                var to = new Dictionary<string, string>();
+                foreach (var kvp in kvps)
+                {
+                    to[kvp.Key] = kvp.Value.ToJsv();
+                }
+                return to;
+            }
+
             var jsv = SerializeToString(obj);
             var map = DeserializeFromString<Dictionary<string, string>>(jsv);
             return map;
@@ -308,7 +281,9 @@ namespace ServiceStack.Text
             if (fn != null)
                 return Dump(fn);
 
-            var dtoStr = SerializeToString(instance);
+            var dtoStr = !HasCircularReferences(instance) 
+                ? SerializeToString(instance)
+                : SerializeToString(instance.ToSafePartialObjectDictionary());
             var formatStr = JsvFormatter.Format(dtoStr);
             return formatStr;
         }
@@ -316,7 +291,7 @@ namespace ServiceStack.Text
         public static string Dump(this Delegate fn)
         {
             var method = fn.GetType().GetMethod("Invoke");
-            var sb = new StringBuilder();
+            var sb = StringBuilderThreadStatic.Allocate();
             foreach (var param in method.GetParameters())
             {
                 if (sb.Length > 0)
@@ -326,8 +301,130 @@ namespace ServiceStack.Text
             }
 
             var methodName = fn.Method().Name;
-            var info = "{0} {1}({2})".Fmt(method.ReturnType.Name, methodName, sb);
+            var info = "{0} {1}({2})".Fmt(method.ReturnType.Name, methodName, 
+                StringBuilderThreadStatic.ReturnAndFree(sb));
             return info;
+        }
+
+        public static bool HasCircularReferences(object value)
+        {
+            return HasCircularReferences(value, null);
+        }
+
+        private static bool HasCircularReferences(object value, Stack<object> parentValues)
+        {
+            var type = value != null ? value.GetType() : null;
+
+            if (type == null || !type.IsClass() || value is string)
+                return false;
+
+            if (parentValues == null)
+            {
+                parentValues = new Stack<object>();
+                parentValues.Push(value);
+            }
+
+            var valueEnumerable = value as IEnumerable;
+            if (valueEnumerable != null)
+            {
+                foreach (var item in valueEnumerable)
+                {
+                    if (HasCircularReferences(item, parentValues))
+                        return true;
+                }
+            }
+            else
+            {
+                var props = type.GetSerializableProperties();
+
+                foreach (var pi in props)
+                {
+                    if (pi.GetIndexParameters().Length > 0)
+                        continue;
+
+                    var mi = pi.PropertyGetMethod();
+                    var pValue = mi != null ? mi.Invoke(value, null) : null;
+                    if (pValue == null)
+                        continue;
+
+                    if (parentValues.Contains(pValue))
+                        return true;
+
+                    parentValues.Push(pValue);
+
+                    if (HasCircularReferences(pValue, parentValues))
+                        return true;
+
+                    parentValues.Pop();
+                }
+            }
+
+            return false;
+        }
+
+        private static void times(int count, Action fn)
+        {
+            for (var i = 0; i < count; i++) fn();
+        }
+
+        private const string Indent = "    ";
+        public static string IndentJson(this string json)
+        {
+            var indent = 0;
+            var quoted = false;
+            var sb = StringBuilderThreadStatic.Allocate();
+
+            for (var i = 0; i < json.Length; i++)
+            {
+                var ch = json[i];
+                switch (ch)
+                {
+                    case '{':
+                    case '[':
+                        sb.Append(ch);
+                        if (!quoted)
+                        {
+                            sb.AppendLine();
+                            times(++indent, () => sb.Append(Indent));
+                        }
+                        break;
+                    case '}':
+                    case ']':
+                        if (!quoted)
+                        {
+                            sb.AppendLine();
+                            times(--indent, () => sb.Append(Indent));
+                        }
+                        sb.Append(ch);
+                        break;
+                    case '"':
+                        sb.Append(ch);
+                        var escaped = false;
+                        var index = i;
+                        while (index > 0 && json[--index] == '\\')
+                            escaped = !escaped;
+                        if (!escaped)
+                            quoted = !quoted;
+                        break;
+                    case ',':
+                        sb.Append(ch);
+                        if (!quoted)
+                        {
+                            sb.AppendLine();
+                            times(indent, () => sb.Append(Indent));
+                        }
+                        break;
+                    case ':':
+                        sb.Append(ch);
+                        if (!quoted)
+                            sb.Append(" ");
+                        break;
+                    default:
+                        sb.Append(ch);
+                        break;
+                }
+            }
+            return StringBuilderThreadStatic.ReturnAndFree(sb);
         }
     }
 

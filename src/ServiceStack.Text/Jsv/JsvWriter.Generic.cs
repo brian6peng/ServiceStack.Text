@@ -1,4 +1,4 @@
-//Copyright (c) Service Stack LLC. All Rights Reserved.
+//Copyright (c) ServiceStack, Inc. All Rights Reserved.
 //License: https://raw.github.com/ServiceStack/ServiceStack/master/license.txt
 
 using System;
@@ -137,7 +137,7 @@ namespace ServiceStack.Text.Jsv
 #if __IOS__
 			if (writer == null) return;
 #endif
-            TypeConfig<T>.AssertValidUsage();
+            TypeConfig<T>.Init();
 
             try
             {
@@ -161,15 +161,7 @@ namespace ServiceStack.Text.Jsv
 #if __IOS__
 			if (writer == null) return;
 #endif
-            try
-            {
-                TypeConfig<T>.AssertValidUsage();
-            }
-            catch (Exception ex)
-            {
-                var inner = ex.GetInnerMostException();
-                throw inner;
-            }
+            TypeConfig<T>.Init();
 
             JsState.Depth = 0;
             CacheFn(writer, value);
